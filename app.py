@@ -674,7 +674,7 @@ def main():
                             Live Analysis
                         </div>
                     </div>
-                    <div style="font-weight: 700; color: {text_primary}; margin-bottom: 12px;">Distribution by Category</div>
+                    <div style="font-weight: 700; color: {text_primary}; margin-bottom: 12px;">Distribution of Detected PII Entities ({total_redacted:,} Total Redactions)</div>
                 """, unsafe_allow_html=True)
 
                 if results["stats_by_type"]:
@@ -752,7 +752,7 @@ def main():
             with col_analytics_right:
                 st.markdown(f"""
                 <div class="analytics-card">
-                    <div class="analytics-title" style="margin-bottom: 18px;">Category Summary</div>
+                    <div class="analytics-title" style="margin-bottom: 18px;">Category Summary ({total_redacted:,} Entities Redacted)</div>
                 """, unsafe_allow_html=True)
 
                 if results["stats_by_type"]:
@@ -763,9 +763,9 @@ def main():
                         bar_width = max(int(pct * 1.5), 6)
                         table_rows_html += f'<tr><td class="cat-name-cell">{cat}</td><td style="font-weight: 600;">{count:,}</td><td><div class="share-bar-wrapper"><div class="share-bar-fill" style="width: {bar_width}px; background-color: {bar_color};"></div><span style="font-weight: 700; color: {bar_color};">{pct}%</span></div></td></tr>'
 
-                    table_rows_html += f'<tr class="total-summary-row"><td style="font-size: 0.95rem;">Total</td><td style="font-size: 0.95rem;">{total_redacted:,}</td><td style="font-size: 0.95rem;">100%</td></tr>'
+                    table_rows_html += f'<tr class="total-summary-row"><td style="font-size: 0.95rem;">Total PII Entities Redacted</td><td style="font-size: 0.95rem;">{total_redacted:,}</td><td style="font-size: 0.95rem;">100%</td></tr>'
 
-                    table_html = f'<table class="custom-cat-table"><thead><tr><th>PII Category</th><th>Entities</th><th>Share (%)</th></tr></thead><tbody>{table_rows_html}</tbody></table>'
+                    table_html = f'<table class="custom-cat-table"><thead><tr><th>PII Category</th><th>Entities Redacted</th><th>Share (%)</th></tr></thead><tbody>{table_rows_html}</tbody></table>'
                     st.markdown(table_html, unsafe_allow_html=True)
 
                 st.markdown('</div>', unsafe_allow_html=True)

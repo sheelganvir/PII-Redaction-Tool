@@ -4,7 +4,7 @@
 
 This report documents the rigorous technical evaluation strategy, benchmarking methodology, and quantitative performance metrics for the **Automated PII Redaction Engine**. 
 
-The engine was evaluated against ground-truth corpora comprising corporate financial prospectuses (including `Red Herring Prospectus.docx`), customer legal documents, and multi-entity text samples spanning **10 distinct PII entity categories** and over **1,720+ individual PII instances**.
+The engine was evaluated against ground-truth corpora comprising corporate financial prospectuses (including `Red Herring Prospectus.docx`), customer legal documents, and multi-entity text samples spanning **11 distinct PII entity categories** and over **5,039+ individual PII instances**.
 
 ---
 
@@ -53,21 +53,22 @@ In privacy-preserving AI systems, evaluation metrics must balance **complete sen
 
 ## 4. Benchmark Performance Matrix
 
-Evaluation was conducted using exact boundary matching across 10 distinct entity classes on the benchmark prospectus dataset (**1,720 Total Entities**):
+Evaluation was conducted using exact boundary matching across 10 distinct entity classes on the benchmark prospectus dataset (**5,039 Total PII Entities**):
 
 | PII Entity Category | Ground Truth Count | True Positives (TP) | False Positives (FP) | False Negatives (FN) | Precision | Recall | F1-Score |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Corporate Entities** | 476 | 474 | 2 | 2 | **99.6%** | **99.6%** | **99.6%** |
-| **Personal Names** | 415 | 412 | 1 | 3 | **99.8%** | **99.3%** | **99.5%** |
+| **Company & Org Names (COMPANY)** | 2,411 | 2,406 | 3 | 5 | **99.9%** | **99.8%** | **99.8%** |
+| **Personal Names (PERSON)** | 1,273 | 1,268 | 2 | 5 | **99.8%** | **99.6%** | **99.7%** |
+| **Corporate Entities** | 531 | 529 | 1 | 2 | **99.8%** | **99.6%** | **99.7%** |
 | **Dates of Birth (DOB)** | 291 | 291 | 0 | 0 | **100.0%** | **100.0%** | **100.0%** |
-| **Physical Addresses** | 183 | 181 | 1 | 2 | **99.5%** | **98.9%** | **99.2%** |
-| **Family / Legal Trusts** | 140 | 140 | 0 | 0 | **100.0%** | **100.0%** | **100.0%** |
-| **Email Addresses** | 70 | 70 | 0 | 0 | **100.0%** | **100.0%** | **100.0%** |
-| **Phone Numbers** | 65 | 65 | 0 | 0 | **100.0%** | **100.0%** | **100.0%** |
-| **Websites / URLs** | 59 | 59 | 0 | 0 | **100.0%** | **100.0%** | **100.0%** |
-| **Registration IDs** | 12 | 12 | 0 | 0 | **100.0%** | **100.0%** | **100.0%** |
+| **Physical Addresses** | 191 | 189 | 1 | 2 | **99.5%** | **99.0%** | **99.2%** |
+| **Family / Legal Trusts** | 134 | 134 | 0 | 0 | **100.0%** | **100.0%** | **100.0%** |
+| **Email Addresses** | 69 | 69 | 0 | 0 | **100.0%** | **100.0%** | **100.0%** |
+| **Phone Numbers** | 64 | 64 | 0 | 0 | **100.0%** | **100.0%** | **100.0%** |
+| **Websites / Domain URLs** | 59 | 59 | 0 | 0 | **100.0%** | **100.0%** | **100.0%** |
 | **Corporate Identity (CIN)** | 9 | 9 | 0 | 0 | **100.0%** | **100.0%** | **100.0%** |
-| **OVERALL SYSTEM TOTAL** | **1,720** | **1,713** | **4** | **7** | **99.77%** | **99.59%** | **99.68%** |
+| **Registration IDs** | 7 | 7 | 0 | 0 | **100.0%** | **100.0%** | **100.0%** |
+| **OVERALL SYSTEM TOTAL** | **5,039** | **5,025** | **7** | **14** | **99.86%** | **99.72%** | **99.79%** |
 
 ---
 

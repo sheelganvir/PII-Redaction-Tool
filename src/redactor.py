@@ -146,6 +146,28 @@ class PIIRedactor:
         self.mappings[clean_key] = styled_replacement
         return styled_replacement
 
+    def _is_excluded(self, text: str) -> bool:
+        clean_text = text.strip().strip(".,;:()[]'\"").lower()
+        if not clean_text or len(clean_text) <= 2:
+            return True
+        excluded_lower = {t.lower() for t in self.EXCLUDED_TERMS}
+        if clean_text in excluded_lower:
+            return True
+        generic_terms = {
+            "company", "our company", "the company", "issuer", "our issuer", "director", "directors",
+            "board", "board of directors", "lead manager", "lead managers", "book running lead manager",
+            "statutory auditor", "auditors", "company secretary", "compliance officer", "promoter",
+            "promoters", "promoter group", "shareholder", "shareholders", "table", "section", "draft",
+            "prospectus", "red herring prospectus", "sebi", "bse", "nse", "roc", "pan", "din", "cin",
+            "order", "ticket", "issue", "offer", "equity shares", "shares", "cap price", "floor price",
+            "registered office", "corporate office", "contact person", "website", "telephone", "email",
+            "baner pune", "baner", "pallod farms", "birdewadi", "appasaheb marathe marg", "prabhadevi",
+            "vikhroli", "mumbai", "bandra east", "kurla", "bkc", "embassy", "l b s marg", "inspire bkc"
+        }
+        if clean_text in generic_terms:
+            return True
+        return False
+
     def detect_entities(self, text: str) -> List[Dict[str, Any]]:
         """
         Scans text and returns list of detected entity dicts:
@@ -157,7 +179,7 @@ class PIIRedactor:
         for entity_type, pattern in self.REGEX_PATTERNS.items():
             for match in re.finditer(pattern, text, re.IGNORECASE):
                 val = match.group()
-                if val.strip() in self.EXCLUDED_TERMS:
+                if self._is_excluded(val):
                     continue
                 entities.append({
                     "start": match.start(),
@@ -172,7 +194,7 @@ class PIIRedactor:
                 results = self.analyzer.analyze(text=text, language='en')
                 for res in results:
                     val = text[res.start:res.end]
-                    if val.strip() in self.EXCLUDED_TERMS:
+                    if self._is_excluded(val):
                         continue
                     ent_type = res.entity_type
                     if ent_type in ["PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER", "ORGANIZATION", "LOCATION", "IP_ADDRESS"]:
@@ -195,7 +217,7 @@ class PIIRedactor:
                 doc = self.nlp(text)
                 for ent in doc.ents:
                     val = ent.text
-                    if val.strip() in self.EXCLUDED_TERMS:
+                    if self._is_excluded(val):
                         continue
                     if ent.label_ in ["PERSON", "ORG", "GPE", "LOC", "FAC"]:
                         norm_type = "PERSON" if ent.label_ == "PERSON" else \

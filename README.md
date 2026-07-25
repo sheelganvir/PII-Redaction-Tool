@@ -113,14 +113,14 @@ Navigate to `http://localhost:8501` in your browser.
 
 ## 📊 Benchmarking & Performance Metrics
 
-Evaluated against financial prospectuses containing over **1,720+ PII entities**:
+Evaluated against financial prospectuses containing over **5,039+ PII entities**:
 
 | Metric | Score | Performance Level |
 | :--- | :---: | :--- |
-| **Detection Precision** | **99.33%** | High Precision (Zero Over-redaction) |
-| **Detection Recall** | **98.84%** | Ultra High Coverage (Zero Sensitive Leaks) |
-| **Overall F1-Score** | **99.08%** | Balanced Production Score |
-| **Format Retention** | **100.0%** | Zero Layout Loss |
+| **Detection Precision** | **99.77%** | High Precision (Zero Over-redaction) |
+| **Detection Recall** | **99.59%** | Ultra High Coverage (Zero Sensitive Leaks) |
+| **Overall F1-Score** | **99.68%** | Balanced Production Score |
+| **Format Retention** | **100.0%** | Zero OpenXML Layout Loss |
 
 Detailed evaluation methodology and confusion matrix available in [evaluation_report.md](evaluation_report.md).
 
