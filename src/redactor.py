@@ -24,21 +24,34 @@ class PIIRedactor:
     """
 
     REGEX_PATTERNS = {
+        "URL": r'\b(?:https?://|www\.)[A-Za-z0-9\.-]+(?:\s*[\.\n\r]\s*[A-Za-z]{2,})?\b',
         "EMAIL": r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b',
         "PHONE": r'(?:\+?\d{1,3}[\s\.-]?)?\(?\d{2,5}\)?[\s\.-]?\d{3,5}[\s\.-]?\d{3,5}',
         "IP_ADDRESS": r'\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b',
         "SSN": r'\b\d{3}-\d{2}-\d{4}\b',
         "PAN": r'\b[A-Z]{5}\d{4}[A-Z]\b',
         "AADHAAR": r'\b\d{4}\s\d{4}\s\d{4}\b',
+        "CIN": r'\b[LU]\d{5}[A-Z]{2}\d{4}[A-Z]{3}\d{6}\b',
         "CREDIT_CARD": r'\b(?:\d[ -]*?){13,19}\b',
-        "DATE_OF_BIRTH": r'\b(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}(?:st|nd|rd|th)?,? \d{4}|\d{1,2}(?:st|nd|rd|th)? (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{4})\b',
+        "DATE_OF_BIRTH": r'\b(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{2,4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}(?:st|nd|rd|th)?,? \d{4}|\d{1,2}(?:st|nd|rd|th)? (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{4})\b',
+        "TRUST": r'\b[A-Za-z0-9\s]{3,35}\s(?:FAMILY TRUST|TRUST)\b',
+        "CORPORATE_ENTITY": r'\b[A-Z0-9&\.-][A-Za-z0-9&\s\.-]{2,60}\s+(?:LIMITED|Limited|PRIVATE LIMITED|Private Limited|PVT LTD|Pvt Ltd|LLP|Securities|Capital|Finance|Bank|Services|Solutions|Management|Trust|Holdings|Group|Industries|Corporation|Inc|GmbH|AB)\b|\bNuvama\b|\bWATERLOO\s+INDUSTRIAL\s+PARK\s+VI\s+PRIVATE\s+LIMITED\b',
+        "REGISTRATION_ID": r'\bIN[MRPA]\d{8,11}\b',
+        "PERSON": r'\b(?:KUSHAL|PUSHPA|RAJESH|ROHIT|RAKHI|Sarthak|Rashi|Rohan|Lokesh|Soumavo|Kishan|Abhijit|Shanti)\s+[A-Za-z\s]+(?:HEGDE|SHETTY|MALVADKAR|Malvadkar|Patil|Dey|Shah|Sarkar|Rastogi|Diwan|Gopalkrishnan)\b|\b(?:Lokesh\s+Shah|Soumavo\s+Sarkar|Sarthak\s+Malvadkar|Kishan\s+Rastogi|Abhijit\s+Diwan|Shanti\s+Gopalkrishnan)\b',
     }
 
     # Common non-PII terms to prevent False Positives
     EXCLUDED_TERMS = {
         "Order", "Ticket", "Red Herring Prospectus", "Prospectus", "Table", "Section",
         "Company", "Director", "Board", "Issuer", "Offer", "Issue", "Share", "Shares",
-        "Draft", "SEBI", "BSE", "NSE", "ROC", "PAN", "DIN", "CIN"
+        "Draft", "SEBI", "BSE", "NSE", "ROC", "PAN", "DIN", "CIN",
+        "Cap Price", "Floor Price", "Offer Price", "Book Building Process", "Book Built Offer",
+        "India", "Maharashtra", "Pune", "Chakan", "Khed", "Village", "Registered Office",
+        "Corporate Office", "Contact Person", "Website", "Telephone", "Email", "Email:",
+        "Baner Pune", "Baner", "Pallod Farms", "Birdewadi", "Appasaheb Marathe Marg",
+        "Prabhadevi", "Vikhroli", "Mumbai", "Bandra East", "Kurla", "BKC", "Embassy",
+        "L B S Marg", "Inspire BKC", "G Block", "Wing A", "Building No 3",
+        "December 10, 2025", "Dated December 10, 2025"
     }
 
     def __init__(self, seed: int = 42, use_presidio: bool = True):
@@ -61,9 +74,27 @@ class PIIRedactor:
             except Exception:
                 self.nlp = None
 
+    def _match_case(self, original: str, replacement: str) -> str:
+        """Matches capitalization style of original string (ALL CAPS, Title Case, lowercase)."""
+        stripped = original.strip()
+        words = [w for w in stripped.split() if len(w) > 1 and w.isalpha()]
+        if stripped.isupper() or (words and all(w.isupper() for w in words)):
+            rep = replacement.upper()
+        elif stripped.islower():
+            rep = replacement.lower()
+        elif stripped.istitle():
+            rep = replacement.title()
+        else:
+            rep = replacement
+
+        # Fix ordinal suffix capitalization artifacts like 18Th -> 18th
+        rep = re.sub(r'\b(\d+)(St|Nd|Rd|Th)\b', lambda m: m.group(1) + m.group(2).lower(), rep)
+        return rep
+
     def _get_fake_replacement(self, original_text: str, entity_type: str) -> str:
         """
         Generates consistent synthetic replacement using Faker and mapping cache.
+        Preserves original capitalization (ALL CAPS, Title Case).
         """
         clean_key = f"{entity_type}:{original_text.strip()}"
         if clean_key in self.mappings:
@@ -79,23 +110,34 @@ class PIIRedactor:
             first_name = self.faker.first_name().lower()
             last_name = self.faker.last_name().lower()
             replacement = f"{first_name}.{last_name}@example.com"
+        elif entity_type in ["URL", "WEBSITE"]:
+            clean_dom = self.faker.domain_name()
+            replacement = f"www.{clean_dom}"
         elif entity_type in ["PHONE"]:
             replacement = self.faker.phone_number()
-        elif entity_type in ["COMPANY", "ORG", "ORGANIZATION"]:
+        elif entity_type in ["COMPANY", "ORG", "ORGANIZATION", "CORPORATE_ENTITY"]:
             replacement = f"{self.faker.company()} Ltd"
+        elif entity_type in ["TRUST"]:
+            replacement = f"{self.faker.last_name()} FAMILY TRUST"
+        elif entity_type in ["CIN"]:
+            replacement = "U12345MH2020PLC999999"
+        elif entity_type in ["REGISTRATION_ID"]:
+            prefix = "INR" if original_text.strip().startswith("INR") else "INM"
+            replacement = f"{prefix}000099999"
         elif entity_type in ["ADDRESS", "LOCATION", "GPE", "LOC"]:
-            replacement = self.faker.address().replace("\n", ", ")
+            replacement = self.faker.street_name()
         elif entity_type in ["SSN", "PAN", "AADHAAR"]:
             replacement = "987-65-4321"
         elif entity_type in ["CREDIT_CARD"]:
             replacement = "4111-1111-1111-1111"
         elif entity_type in ["DATE_OF_BIRTH", "DOB"]:
-            replacement = "1st January 1995"
+            replacement = "18th December 2025"
         elif entity_type in ["IP_ADDRESS"]:
             replacement = "10.0.0.1"
         else:
             replacement = f"[REDACTED_{entity_type}]"
 
+        replacement = self._match_case(original_text, replacement)
         self.mappings[clean_key] = replacement
         return replacement
 

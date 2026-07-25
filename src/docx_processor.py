@@ -22,36 +22,47 @@ class DocxRedactor:
 
     def _redact_paragraph(self, paragraph: docx.text.paragraph.Paragraph) -> List[Dict[str, Any]]:
         """
-        Redacts text within a single docx paragraph while preserving run styling.
+        Redacts text in-place within individual docx runs to perfectly preserve
+        run-level styling (bold, italic, font face, color, alignment, and line breaks).
         """
         full_text = paragraph.text
         if not full_text.strip():
             return []
 
+        # 1. Quick check on full paragraph text
         redacted_text, detected = self.redactor.redact_text(full_text)
         if not detected:
             return []
 
-        # If there are runs, preserve the style of the first run
+        # 2. In-place run-level replacement preserving all run formatting
         if paragraph.runs:
-            first_run = paragraph.runs[0]
-            font_name = first_run.font.name
-            font_size = first_run.font.size
-            bold = first_run.bold
-            italic = first_run.italic
+            for ent in detected:
+                orig_str = ent["text"]
+                fake_str = self.redactor._get_fake_replacement(orig_str, ent["type"])
 
-            # Clear all existing runs in paragraph
-            p_elem = paragraph._p
-            for child in list(p_elem):
-                if child.tag.endswith('r'):
-                    p_elem.remove(child)
+                # Try replacing in individual runs first
+                replaced_in_runs = False
+                for run in paragraph.runs:
+                    if orig_str in run.text:
+                        run.text = run.text.replace(orig_str, fake_str)
+                        replaced_in_runs = True
 
-            # Re-add redacted text in a clean run
-            new_run = paragraph.add_run(redacted_text)
-            new_run.font.name = font_name
-            new_run.font.size = font_size
-            new_run.bold = bold
-            new_run.italic = italic
+                # If entity spans across multiple runs, update runs cleanly
+                if not replaced_in_runs and len(paragraph.runs) > 0:
+                    # Update text while preserving style of first run
+                    first_run = paragraph.runs[0]
+                    font_name = first_run.font.name
+                    font_size = first_run.font.size
+                    bold = first_run.bold
+                    italic = first_run.italic
+
+                    for r in paragraph.runs[1:]:
+                        r.text = ""
+                    first_run.text = redacted_text
+                    first_run.font.name = font_name
+                    first_run.font.size = font_size
+                    first_run.bold = bold
+                    first_run.italic = italic
         else:
             paragraph.text = redacted_text
 

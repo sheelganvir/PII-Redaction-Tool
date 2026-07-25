@@ -1,0 +1,20 @@
+# Python byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary MS Word lock files
+~$*.docx
+~$*.doc
+
+# Temporary uploader working files
+temp_input_*
+temp_redacted_*
+
+# Environments & IDEs
+.env
+.venv
+env/
+venv/
+.vscode/
+.idea/
