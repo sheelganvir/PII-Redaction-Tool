@@ -64,15 +64,18 @@ class PIIRedactor:
         if self.use_presidio:
             try:
                 self.analyzer = AnalyzerEngine()
-            except Exception:
+            except Exception as e:
+                print(f"Presidio initialization warning: {e}")
                 self.use_presidio = False
 
         self.nlp = None
         if NLP_AVAILABLE and not self.use_presidio:
-            try:
-                self.nlp = spacy.load("en_core_web_sm")
-            except Exception:
-                self.nlp = None
+            for model_name in ["en_core_web_sm", "en_core_web_lg"]:
+                try:
+                    self.nlp = spacy.load(model_name)
+                    break
+                except Exception:
+                    pass
 
     def _match_case(self, original: str, replacement: str) -> str:
         """Matches capitalization style of original string (ALL CAPS, Title Case, lowercase)."""
@@ -118,44 +121,37 @@ class PIIRedactor:
         elif entity_type in ["COMPANY", "ORG", "ORGANIZATION", "CORPORATE_ENTITY"]:
             replacement = f"{self.faker.company()} Ltd"
         elif entity_type in ["TRUST"]:
-            replacement = f"{self.faker.last_name()} FAMILY TRUST"
-        elif entity_type in ["CIN"]:
-            replacement = "U12345MH2020PLC999999"
-        elif entity_type in ["REGISTRATION_ID"]:
-            prefix = "INR" if original_text.strip().startswith("INR") else "INM"
-            replacement = f"{prefix}000099999"
-        elif entity_type in ["ADDRESS", "LOCATION", "GPE", "LOC"]:
-            replacement = self.faker.street_name()
-        elif entity_type in ["SSN", "PAN", "AADHAAR"]:
-            replacement = "987-65-4321"
-        elif entity_type in ["CREDIT_CARD"]:
-            replacement = "4111-1111-1111-1111"
-        elif entity_type in ["DATE_OF_BIRTH", "DOB"]:
-            replacement = "18th December 2025"
+            replacement = f"{self.faker.last_name()} Family Trust"
+        elif entity_type in ["ADDRESS", "LOCATION"]:
+            replacement = f"{self.faker.street_address()}, {self.faker.city()}"
         elif entity_type in ["IP_ADDRESS"]:
-            replacement = "10.0.0.1"
+            replacement = self.faker.ipv4()
+        elif entity_type in ["CREDIT_CARD"]:
+            replacement = f"4{self.faker.numerify('###########')}"
+        elif entity_type in ["SSN", "PAN", "AADHAAR", "CIN", "REGISTRATION_ID"]:
+            replacement = f"ANON-{self.faker.numerify('######')}"
+        elif entity_type in ["DATE_OF_BIRTH"]:
+            replacement = "01/01/1990"
         else:
             replacement = f"[REDACTED_{entity_type}]"
 
-        replacement = self._match_case(original_text, replacement)
-        self.mappings[clean_key] = replacement
-        return replacement
+        # Apply capitalization matching
+        styled_replacement = self._match_case(original_text, replacement)
+        self.mappings[clean_key] = styled_replacement
+        return styled_replacement
 
     def detect_entities(self, text: str) -> List[Dict[str, Any]]:
         """
-        Detects all PII entities in text with offset boundaries.
-        Returns list of dicts: [{'start', 'end', 'text', 'type'}]
+        Scans text and returns list of detected entity dicts:
+        [{'start': 0, 'end': 10, 'text': '...', 'type': '...'}]
         """
-        entities: List[Dict[str, Any]] = []
+        entities = []
 
-        # 1. Regex Matching
+        # 1. Regex Pattern Matching
         for entity_type, pattern in self.REGEX_PATTERNS.items():
             for match in re.finditer(pattern, text, re.IGNORECASE):
-                val = match.group(0)
+                val = match.group()
                 if val.strip() in self.EXCLUDED_TERMS:
-                    continue
-                # Validate phone numbers to avoid matching plain dates or small numbers
-                if entity_type == "PHONE" and (len(re.sub(r'\D', '', val)) < 7 or len(re.sub(r'\D', '', val)) > 15):
                     continue
                 entities.append({
                     "start": match.start(),
@@ -164,42 +160,48 @@ class PIIRedactor:
                     "type": entity_type
                 })
 
-        # 2. Presidio / spaCy NER Matching
+        # 2. Presidio / spaCy NER Matching (wrapped in try-except for zero-crash cloud deployment)
         if self.use_presidio and self.analyzer:
-            results = self.analyzer.analyze(text=text, language='en')
-            for res in results:
-                val = text[res.start:res.end]
-                if val.strip() in self.EXCLUDED_TERMS:
-                    continue
-                ent_type = res.entity_type
-                if ent_type in ["PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER", "ORGANIZATION", "LOCATION", "IP_ADDRESS"]:
-                    # Normalize type
-                    norm_type = "PERSON" if ent_type == "PERSON" else \
-                                "EMAIL" if ent_type == "EMAIL_ADDRESS" else \
-                                "PHONE" if ent_type == "PHONE_NUMBER" else \
-                                "COMPANY" if ent_type == "ORGANIZATION" else \
-                                "ADDRESS" if ent_type in ["LOCATION", "GPE", "LOC"] else ent_type
-                    entities.append({
-                        "start": res.start,
-                        "end": res.end,
-                        "text": val,
-                        "type": norm_type
-                    })
+            try:
+                results = self.analyzer.analyze(text=text, language='en')
+                for res in results:
+                    val = text[res.start:res.end]
+                    if val.strip() in self.EXCLUDED_TERMS:
+                        continue
+                    ent_type = res.entity_type
+                    if ent_type in ["PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER", "ORGANIZATION", "LOCATION", "IP_ADDRESS"]:
+                        norm_type = "PERSON" if ent_type == "PERSON" else \
+                                    "EMAIL" if ent_type == "EMAIL_ADDRESS" else \
+                                    "PHONE" if ent_type == "PHONE_NUMBER" else \
+                                    "COMPANY" if ent_type == "ORGANIZATION" else \
+                                    "ADDRESS" if ent_type in ["LOCATION", "GPE", "LOC"] else ent_type
+                        entities.append({
+                            "start": res.start,
+                            "end": res.end,
+                            "text": val,
+                            "type": norm_type
+                        })
+            except Exception as e:
+                print(f"Presidio analyze error: {e}")
+
         elif self.nlp:
-            doc = self.nlp(text)
-            for ent in doc.ents:
-                val = ent.text
-                if val.strip() in self.EXCLUDED_TERMS:
-                    continue
-                if ent.label_ in ["PERSON", "ORG", "GPE", "LOC", "FAC"]:
-                    norm_type = "PERSON" if ent.label_ == "PERSON" else \
-                                "COMPANY" if ent.label_ == "ORG" else "ADDRESS"
-                    entities.append({
-                        "start": ent.start_char,
-                        "end": ent.end_char,
-                        "text": val,
-                        "type": norm_type
-                    })
+            try:
+                doc = self.nlp(text)
+                for ent in doc.ents:
+                    val = ent.text
+                    if val.strip() in self.EXCLUDED_TERMS:
+                        continue
+                    if ent.label_ in ["PERSON", "ORG", "GPE", "LOC", "FAC"]:
+                        norm_type = "PERSON" if ent.label_ == "PERSON" else \
+                                    "COMPANY" if ent.label_ == "ORG" else "ADDRESS"
+                        entities.append({
+                            "start": ent.start_char,
+                            "end": ent.end_char,
+                            "text": val,
+                            "type": norm_type
+                        })
+            except Exception as e:
+                print(f"spaCy analyze error: {e}")
 
         # 3. Deduplicate overlapping entity boundaries (prefer longer matches)
         entities = sorted(entities, key=lambda x: (x["start"], -(x["end"] - x["start"])))

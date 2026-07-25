@@ -606,17 +606,22 @@ def main():
             progress_bar = st.progress(0, text="Initializing Hybrid PII Engine...")
             start_t = time.time()
             
-            progress_bar.progress(30, text="Scanning document & running NLP models...")
-            redactor = PIIRedactor(seed=seed_val)
-            processor = DocxRedactor(redactor=redactor)
+            try:
+                progress_bar.progress(30, text="Scanning document & running NLP models...")
+                redactor = PIIRedactor(seed=seed_val)
+                processor = DocxRedactor(redactor=redactor)
 
-            progress_bar.progress(60, text="Performing format-preserving run-level substitution...")
-            results = processor.redact_document(temp_input_path, temp_output_path)
-            elapsed = round(time.time() - start_t, 2)
-            
-            progress_bar.progress(100, text="Redaction Complete!")
-            time.sleep(0.4)
-            progress_bar.empty()
+                progress_bar.progress(60, text="Performing format-preserving run-level substitution...")
+                results = processor.redact_document(temp_input_path, temp_output_path)
+                elapsed = round(time.time() - start_t, 2)
+                
+                progress_bar.progress(100, text="Redaction Complete!")
+                time.sleep(0.4)
+                progress_bar.empty()
+            except Exception as e:
+                progress_bar.empty()
+                st.error(f"Redaction Processing Error: {e}")
+                return
 
             st.balloons()
 

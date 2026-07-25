@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Scratch directory & doc generator scripts
+scratch/
+scratch/generate_doc_report.py
+
 # Temporary MS Word lock files
 ~$*.docx
 ~$*.doc
