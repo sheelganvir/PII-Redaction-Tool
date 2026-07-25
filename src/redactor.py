@@ -60,31 +60,28 @@ class PIIRedactor:
         self.mappings: Dict[str, str] = {}
         self.use_presidio = use_presidio and PRESIDIO_AVAILABLE
 
-        self.analyzer = None
-        if self.use_presidio and PRESIDIO_AVAILABLE:
-            try:
-                from presidio_analyzer.nlp_engine import NlpEngineProvider
-                provider = NlpEngineProvider(nlp_configuration={
-                    "nlp_engine_name": "spacy",
-                    "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}]
-                })
-                nlp_engine = provider.create_engine()
-                self.analyzer = AnalyzerEngine(nlp_engine=nlp_engine)
-            except Exception as e:
-                print(f"Presidio NlpEngineProvider fallback warning: {e}")
-                try:
-                    self.analyzer = AnalyzerEngine()
-                except Exception:
-                    self.use_presidio = False
-
+        # 1. Load pre-installed spaCy model first
         self.nlp = None
-        if NLP_AVAILABLE and not self.use_presidio:
+        if NLP_AVAILABLE:
             for model_name in ["en_core_web_sm", "en_core_web_lg"]:
                 try:
                     self.nlp = spacy.load(model_name)
                     break
                 except Exception:
                     pass
+
+        # 2. Configure Presidio with pre-assigned nlp dictionary to prevent background pip downloads
+        self.analyzer = None
+        if self.use_presidio and PRESIDIO_AVAILABLE:
+            try:
+                from presidio_analyzer.nlp_engine import SpacyNlpEngine
+                nlp_engine = SpacyNlpEngine(models=[{"lang_code": "en", "model_name": "en_core_web_sm"}])
+                if self.nlp:
+                    nlp_engine.nlp = {"en": self.nlp}
+                self.analyzer = AnalyzerEngine(nlp_engine=nlp_engine)
+            except Exception as e:
+                print(f"Presidio SpacyNlpEngine fallback warning: {e}")
+                self.use_presidio = False
 
     def _match_case(self, original: str, replacement: str) -> str:
         """Matches capitalization style of original string (ALL CAPS, Title Case, lowercase)."""

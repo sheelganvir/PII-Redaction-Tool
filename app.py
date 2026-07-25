@@ -1,6 +1,9 @@
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import streamlit as st
 import docx
-import os
 import io
 import time
 import uuid
