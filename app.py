@@ -3,6 +3,7 @@ import docx
 import os
 import io
 import time
+import uuid
 import pandas as pd
 import altair as alt
 from src.redactor import PIIRedactor
@@ -15,6 +16,11 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+
+@st.cache_resource
+def load_redactor(seed_val: int):
+    return PIIRedactor(seed=seed_val)
 
 
 def main():
@@ -596,8 +602,9 @@ def main():
 
     if uploaded_file is not None:
         input_bytes = uploaded_file.getvalue()
-        temp_input_path = f"temp_input_{uploaded_file.name}"
-        temp_output_path = f"temp_redacted_{uploaded_file.name}"
+        unique_id = uuid.uuid4().hex[:8]
+        temp_input_path = f"temp_input_{unique_id}_{uploaded_file.name}"
+        temp_output_path = f"temp_redacted_{unique_id}_{uploaded_file.name}"
 
         with open(temp_input_path, "wb") as f:
             f.write(input_bytes)
@@ -607,20 +614,28 @@ def main():
             start_t = time.time()
             
             try:
-                progress_bar.progress(30, text="Scanning document & running NLP models...")
-                redactor = PIIRedactor(seed=seed_val)
+                progress_bar.progress(10, text="Retrieving cached NLP models & engine rules...")
+                redactor = load_redactor(seed_val)
                 processor = DocxRedactor(redactor=redactor)
 
-                progress_bar.progress(60, text="Performing format-preserving run-level substitution...")
-                results = processor.redact_document(temp_input_path, temp_output_path)
+                def update_progress(pct, msg):
+                    progress_bar.progress(pct, text=msg)
+
+                results = processor.redact_document(
+                    temp_input_path, 
+                    temp_output_path, 
+                    progress_callback=update_progress
+                )
                 elapsed = round(time.time() - start_t, 2)
                 
                 progress_bar.progress(100, text="Redaction Complete!")
-                time.sleep(0.4)
+                time.sleep(0.3)
                 progress_bar.empty()
             except Exception as e:
                 progress_bar.empty()
                 st.error(f"Redaction Processing Error: {e}")
+                if os.path.exists(temp_input_path):
+                    os.remove(temp_input_path)
                 return
 
             st.balloons()

@@ -26,59 +26,63 @@ class DocxRedactor:
         run-level styling (bold, italic, font face, color, alignment, and line breaks).
         """
         full_text = paragraph.text
-        if not full_text.strip():
+        if not full_text or not full_text.strip():
             return []
 
-        # 1. Quick check on full paragraph text
-        redacted_text, detected = self.redactor.redact_text(full_text)
-        if not detected:
+        # 1. Detect PII entities in full paragraph text
+        entities = self.redactor.detect_entities(full_text)
+        if not entities:
             return []
 
-        # 2. In-place run-level replacement preserving all run formatting
+        # 2. Check if all detected entities exist within single runs
+        all_in_single_runs = True
         if paragraph.runs:
-            for ent in detected:
+            for ent in entities:
+                orig_str = ent["text"]
+                if not any(orig_str in run.text for run in paragraph.runs):
+                    all_in_single_runs = False
+                    break
+
+        if all_in_single_runs and paragraph.runs:
+            for ent in entities:
                 orig_str = ent["text"]
                 fake_str = self.redactor._get_fake_replacement(orig_str, ent["type"])
-
-                # Try replacing in individual runs first
-                replaced_in_runs = False
                 for run in paragraph.runs:
                     if orig_str in run.text:
                         run.text = run.text.replace(orig_str, fake_str)
-                        replaced_in_runs = True
-
-                # If entity spans across multiple runs, update runs cleanly
-                if not replaced_in_runs and len(paragraph.runs) > 0:
-                    # Update text while preserving style of first run
-                    first_run = paragraph.runs[0]
-                    font_name = first_run.font.name
-                    font_size = first_run.font.size
-                    bold = first_run.bold
-                    italic = first_run.italic
-
-                    for r in paragraph.runs[1:]:
-                        r.text = ""
-                    first_run.text = redacted_text
-                    first_run.font.name = font_name
-                    first_run.font.size = font_size
-                    first_run.bold = bold
-                    first_run.italic = italic
         else:
-            paragraph.text = redacted_text
+            # Entity spans across multiple runs: update first run with full redacted text and clear remainder
+            redacted_text, _ = self.redactor.redact_text(full_text)
+            if paragraph.runs:
+                paragraph.runs[0].text = redacted_text
+                for r in paragraph.runs[1:]:
+                    r.text = ""
+            else:
+                paragraph.text = redacted_text
 
-        return detected
+        return entities
 
-    def redact_document(self, input_filepath: str, output_filepath: str) -> Dict[str, Any]:
+    def redact_document(self, input_filepath: str, output_filepath: str, progress_callback=None) -> Dict[str, Any]:
         """
-        Processes an entire .docx file (paragraphs and tables) and saves redacted output.
+        Processes an entire .docx file (paragraphs and tables) and saves redacted output with optional real-time progress callbacks.
         """
         doc = docx.Document(input_filepath)
         all_detected_entities: List[Dict[str, Any]] = []
 
+        total_paragraphs = len(doc.paragraphs)
+        table_paragraphs = sum(len(cell.paragraphs) for t in doc.tables for r in t.rows for cell in r.cells)
+        total_items = max(total_paragraphs + table_paragraphs, 1)
+        processed_count = 0
+
         # 1. Redact regular paragraphs
-        for p in doc.paragraphs:
+        for idx, p in enumerate(doc.paragraphs):
             detected = self._redact_paragraph(p)
             all_detected_entities.extend(detected)
+            processed_count += 1
+
+            if progress_callback and (processed_count % 5 == 0 or processed_count == total_items):
+                pct = int(15 + (processed_count / total_items) * 75)
+                progress_callback(pct, f"Scanning & redacting section {processed_count} of {total_items}...")
 
         # 2. Redact tables
         for table in doc.tables:
@@ -87,6 +91,14 @@ class DocxRedactor:
                     for p in cell.paragraphs:
                         detected = self._redact_paragraph(p)
                         all_detected_entities.extend(detected)
+                        processed_count += 1
+
+                        if progress_callback and (processed_count % 10 == 0 or processed_count == total_items):
+                            pct = int(15 + (processed_count / total_items) * 75)
+                            progress_callback(pct, f"Processing document tables ({processed_count}/{total_items})...")
+
+        if progress_callback:
+            progress_callback(95, "Finalizing OpenXML formatting & saving redacted document...")
 
         doc.save(output_filepath)
 
@@ -99,6 +111,5 @@ class DocxRedactor:
         return {
             "total_entities_redacted": len(all_detected_entities),
             "stats_by_type": stats,
-            "detected_entities": all_detected_entities,
-            "output_filepath": output_filepath
+            "entities": all_detected_entities
         }
