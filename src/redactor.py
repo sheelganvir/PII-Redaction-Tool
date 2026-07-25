@@ -61,12 +61,21 @@ class PIIRedactor:
         self.use_presidio = use_presidio and PRESIDIO_AVAILABLE
 
         self.analyzer = None
-        if self.use_presidio:
+        if self.use_presidio and PRESIDIO_AVAILABLE:
             try:
-                self.analyzer = AnalyzerEngine()
+                from presidio_analyzer.nlp_engine import NlpEngineProvider
+                provider = NlpEngineProvider(nlp_configuration={
+                    "nlp_engine_name": "spacy",
+                    "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}]
+                })
+                nlp_engine = provider.create_engine()
+                self.analyzer = AnalyzerEngine(nlp_engine=nlp_engine)
             except Exception as e:
-                print(f"Presidio initialization warning: {e}")
-                self.use_presidio = False
+                print(f"Presidio NlpEngineProvider fallback warning: {e}")
+                try:
+                    self.analyzer = AnalyzerEngine()
+                except Exception:
+                    self.use_presidio = False
 
         self.nlp = None
         if NLP_AVAILABLE and not self.use_presidio:
